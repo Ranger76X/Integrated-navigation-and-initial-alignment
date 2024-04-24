@@ -1,0 +1,285 @@
+clc;
+clear;
+close all;
+format long
+% 娴嬭瘯濮挎?佹洿鏂板嚱鏁?(AttitudeUpdate_single_sample.m)
+
+% 鍖呭惈璺緞,鑻ユ浠ｇ爜瀹炴晥锛屾墜鍔ㄦ坊鍔?
+addpath('./data');
+addpath('./INS_lib');
+addpath('./Kalman_f');
+
+%                                                                                m/s     銆?        rad/s     s
+load("alldata_800_45_1_0005_0.mat");              %鐞嗚寮归亾,鍛藉悕鏍煎紡,    alldata   鍑鸿啗鍒濋??  灏勮(淇话)  鍑鸿啗杞??  閲囨牱鏃堕棿
+A_Data = load("TEST_800_45_1_0005_0.mat");        %妯℃嫙浼犳劅鍣?,鍛藉悕鏍煎紡,     TEST    鍑鸿啗鍒濋??  灏勮(淇话)  鍑鸿啗杞??  閲囨牱鏃堕棿 
+B_SensorData = A_Data.Z_IMU;
+D_N = size(B_SensorData,1);
+D_T = 0.005;
+
+%                 XYZ
+% Z_IMU鍧愭爣绯讳负涓滃寳澶xyz
+% D_ACC = [B_SensorData(:,4),B_SensorData(:,5),B_SensorData(:,6)]';          %鎸夌収绠楁硶椤哄簭閲嶆帓鍔犻?熷害涓夎酱璇绘暟椤哄簭 x ,  y  , z
+% D_GYR = [B_SensorData(:,1),B_SensorData(:,2),B_SensorData(:,3)]';          %鎸夌収绠楁硶椤哄簭閲嶆帓闄?铻轰华涓夎酱璇绘暟椤哄簭pitch,row,yaw                                                                         %                             x    y    z
+
+
+% 鐢熸垚鍣０鍜岄殢鏈烘父璧?
+r_walk = random_walk(D_T,D_N*D_T,D_N,0.01);
+w_noise1 = mvnrnd(0,0.02,D_N);
+w_noise2 = mvnrnd(0,0.03,D_N);
+w_noise3 = mvnrnd(0,0.04,D_N);
+w_noise4 = mvnrnd(0,2,D_N);
+rw = r_walk(1:D_N,1) + w_noise1;
+% rw = w_noise;
+rw = 0;
+% Z_IMU浣跨敤鐨勬儻瀵兼牸寮?
+
+% 娣诲姞鍣０鍜岄殢鏈烘父璧?
+D_ACC = [B_SensorData(:,4)+rw,B_SensorData(:,5)+rw,B_SensorData(:,6)+rw]';
+D_GYR = [B_SensorData(:,1)+rw,B_SensorData(:,2)+rw,B_SensorData(:,3)+rw]';
+GPS_Y = [Y(:,3)+w_noise1,Y(:,1)+w_noise2,Y(:,2)+w_noise3];
+GPS_V = [Y(:,6)+w_noise1/10,Y(:,4)+w_noise1/10,Y(:,5)+w_noise1/10;];
+
+Ballistic_data = [Y(:,3),Y(:,1),Y(:,2)];                                   %妯℃嫙寮归亾
+GPS_test = Generate_GPS(GPS_Y,20,200,D_N);                                %20Hz   GPS
+j = 1;
+for i = 1:10:D_N
+                GPS_plot(j,:) = GPS_test(i,:);                                %20Hz   GP
+    j = j+1;
+end
+GPS_interpolate = Interpolation_GPS(GPS_Y,Ballistic_data,100,200,D_N);     %
+
+% 娣诲姞鍣０鍜岄殢鏈烘父璧?
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%鍦扮悆妯″瀷(WGS84妞悆鍙傛暟)%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% WGS84.a = 6378137.0;                                                       %闀垮崐杞?
+% WGS84.b=6356752.3142;                                                      %鐭崐杞?
+% WGS84.R=6371100;                                                           %骞冲潎鍗婂緞
+% WGS84.f = 1/298.257223563;                                                 %鎵佺巼
+% WGS84.e2=0.00669437999013;                                                 %绗竴鍋忓績鐜囧钩鏂?
+% WGS84.ep2=0.006739496742227;                                               %绗簩鍋忓績鐜囧钩鏂?
+% WGS84.we=7.292115e-5;                                                      %鍦扮悆鑷浆瑙掗?熺巼
+% WGS84.GM=3.986004418e+14;                                                  %鍦扮悆寮曞姏涓哄父鏁?
+% % WGS84.ge=9.7803267715;                                                   %璧ら亾閲嶅姏鍔犻?熷害
+% WGS84.ge=9.80;                                                             %甯歌閲嶅姏鍔犻?熷害
+% WGS84.gp=9.8321863685;                                                     %鏋佸湴閲嶅姏鍔犻?熷害
+% %%%%%%%%%%%%%%%%%%%%%%%%%%鍦扮悆妯″瀷(WGS84妞悆鍙傛暟)%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%鍦扮悆妯″瀷(WGS84绠?鍖栧弬鏁?)%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+WGS84.a = 6371100;                                                         %闀垮崐杞?
+WGS84.b = 6371100;                                                         %鐭崐杞?
+WGS84.R = 6371100;                                                         %骞冲潎鍗婂緞
+WGS84.f = 0;                                                               %鎵佺巼
+WGS84.e = 0;                                                               %鍋忓績鐜?
+WGS84.e2 =0;                                                               %绗竴鍋忓績鐜囧钩鏂?
+WGS84.ep2=0;                                                               %绗簩鍋忓績鐜囧钩鏂?
+WGS84.we =7.292115e-5;                                                     %鍦扮悆鑷浆瑙掗?熺巼
+WGS84.GM =3.986004418e+14;                                                 %鍦扮悆寮曞姏涓哄父鏁?
+% WGS84.ge=9.7803267715;                                                   %璧ら亾閲嶅姏鍔犻?熷害
+WGS84.ge =9.80;                                                            %甯歌閲嶅姏鍔犻?熷害
+WGS84.gp =9.8321863685;                                                    %鏋佸湴閲嶅姏鍔犻?熷害
+%%%%%%%%%%%%%%%%%%%%%%%%%%鍦扮悆妯″瀷(WGS84绠?鍖栧弬鏁?)%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%浣嶅Э鍒濆鍖?%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+XYZ(:,1) = [0;0;0];                                                        %浣嶇疆
+BLH(:,1) = [0;0;0];                                                        %绾粡楂?
+v(:,1) = [Y(1,6);Y(1,4);Y(1,5)];                                           %閫熷害
+Delta_sita = [0;0;0];                                                      %瑙掑閲?
+Euler(:,1) = [45/180*pi;0/180*pi;0/180*pi];                                              %鍒濆娆ф媺瑙抪itch,yaw,row(寮у害鍒?)
+qbn(:,1) = Euler2Quaternion(Euler(1),Euler(2),Euler(3));                   %鍒濆濮挎?佸洓鍏冩暟,涓滃寳澶╁潗鏍囩郴锛屾棆杞『搴?(zxy)312
+Cbn(:,:,1) = Quaternion2ACM(qbn(:,1));                                     %鍒濆濮挎?佹棆杞煩闃?,涓滃寳澶╁潗鏍囩郴锛屾棆杞『搴?(zxy)312
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%浣嶅Э鍒濆鍖?%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%kalman鍒濆鍖?%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+I33 = eye(3);
+O33 = zeros(3,3);
+
+K1.K_x = zeros(9,1);
+K1.K_x_next = zeros(9,1);
+
+K1.K_P = 999*180/pi*eye(9);
+K1.K_P_next = 1*eye(9);
+K1.K_Pc(1,1) = 0; 
+
+K1.K_K = eye(9,6);
+K1.K_Q = 10*eye(9);
+K1.K_R = 180/pi*0.5*eye(6);
+K1.f_c = Cbn(:,:,1) * D_ACC(:,1);
+% f_c = D_ACC(:,1);
+K1.K_F = F_t(WGS84.we,v(:,1),BLH(3,1),Cbn(:,:,1),K1.f_c,WGS84.R,WGS84.R,BLH(1,1));
+K1.K_H = [eye(6),zeros(6,3)];
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%kalman鍒濆鍖?%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+j=2;
+for i = 2:D_N                                          
+%--------------------------------1.濮挎?佺煩闃佃В绠?------------------------------
+    Delta_sita(:,i) = D_GYR(:,i-1)*D_T+(D_GYR(:,i)-D_GYR(:,i-1))/2*D_T;
+    
+    qbn(:,i) = AttitudeUpdate_single_sample(qbn(:,i-1), Delta_sita(:,i-1),Delta_sita(:,i));
+
+    Cbn(:,:,i) = Quaternion2ACM(qbn(:,i));
+    Euler(:,i) = Quaternion2Euler(qbn(:,i));
+%--------------------------------2.閫熷害鏇存柊---------------------------------
+    v(:,i) = VelocityUpdate3(v(:,i-1),D_T,Cbn(:,:,i),Cbn(:,:,i-1),D_ACC(:,i),D_ACC(:,i-1));
+%--------------------------------3.浣嶇疆鏇存柊---------------------------------
+    XYZ(:,i) = LocationUpdata3(XYZ(:,i-1),v(:,i),v(:,i-1),D_T,WGS84);
+    XYZ2(:,i) = B_XYZ2XYZ([XYZ(2,i);XYZ(3,i);XYZ(1,i)],BLH(2,1),BLH(1,1),BLH(3,1),0,WGS84);
+    BLH(:,i) = XYZ2LLA(XYZ2(:,i),WGS84);
+% if mod(i,10) == 1
+%------------------------------鍗″皵鏇兼护娉?------------------------------------
+    K1.f_c = Cbn(:,:,i) * D_ACC(:,i);
+%     f_c = D_ACC(:,i);
+    
+    [K1.K_F,K_F2] = F_t(WGS84.we,v(:,i),BLH(3,i),Cbn(:,:,i),K1.f_c,WGS84.R,WGS84.R,BLH(1,i));
+    
+    K1.K_x_next = (K1.K_F + eye(9)) * K1.K_x(:,j-1);
+    
+    K1.K_P_next = K1.K_F * K1.K_P(:,:,j-1) * K1.K_F' + K1.K_Q;
+    
+    K1.K_K = K1.K_P_next * K1.K_H'/(K1.K_H * K1.K_P_next * K1.K_H' + K1.K_R);
+  
+%     K1.K_Perr(:,i) = [Y(i-1,3) - XYZ(1,i);Y(i-1,1) - XYZ(2,i);Y(i-1,2) - XYZ(3,i)];
+%     K1.K_Verr(:,i) = [Y(i-1,6) - v(1,i);Y(i-1,4) - v(2,i);Y(i-1,5) - v(3,i);];
+%     K1.K_Perr(:,i) = [GPS_interpolate(i-1,1) - XYZ(1,i);GPS_interpolate(i-1,2) - XYZ(2,i);GPS_interpolate(i-1,3) - XYZ(3,i)];
+%     K1.K_Perr(:,i) = [GPS_Y(i-1,1) - XYZ(1,i);GPS_Y(i-1,2) - XYZ(2,i);GPS_Y(i-1,3) - XYZ(3,i)];
+    K1.K_Perr(:,j) = [GPS_interpolate(i-1,1) - XYZ(1,i);GPS_interpolate(i-1,2) - XYZ(2,i);GPS_interpolate(i-1,3) - XYZ(3,i)];
+    K1.K_Verr(:,j) = [GPS_V(i-1,1) - v(1,i);GPS_V(i-1,2) - v(2,i);GPS_V(i-1,3) - v(3,i);];
+    
+
+    
+    
+%     K_Eerr(:,i) = anti_askew(logm(Cbn0(:,:,i)' * Y_Cbn0(:,:,i)));
+    K1.K_y = [K1.K_Verr(:,j);K1.K_Perr(:,j)];
+     
+    K1.K_x(:,j) = K1.K_x_next + K1.K_K * (K1.K_y - K1.K_H * K1.K_x_next);
+     
+    K1.K_P(:,:,j) = (eye(9) - K1.K_K * K1.K_H) * K1.K_P_next;
+    K1.K_P(:,:,j) = (K1.K_P(:,:,j) + K1.K_P(:,:,j)') / 2;
+    
+    K1.K_Pc(j-1) = sqrt(trace(K1.K_P(:,:,j)));
+    
+    XYZ(1:3,i) = XYZ(1:3,i) + K1.K_x(4:6,j);
+    
+    v(:,i) = v(:,i) + K1.K_x(1:3,j);
+    j = j+1;
+%-----------------------------鍗″皵鏇兼护娉?-------------------------------------    
+% end
+end
+
+Euler = Euler/pi*180;
+Err = Euler(3,2:end)' - Y(1:D_N-1,8);
+
+Z_Err(:,1) = Y(4:10:end-1,3)'-XYZ(1,5:10:end);   %x
+Z_Err(:,2) = Y(4:10:end-1,1)'-XYZ(2,5:10:end);   %y
+Z_Err(:,3) = Y(4:10:end-1,2)'-XYZ(3,5:10:end);   %z
+
+Z_Err2(:,1) = GPS_Y(4:10:end-1,1)-Y(4:10:end-1,3);   %x
+Z_Err2(:,2) = GPS_Y(4:10:end-1,2)-Y(4:10:end-1,1);   %y
+Z_Err2(:,3) = GPS_Y(4:10:end-1,3)-Y(4:10:end-1,2);   %z
+% 
+% Y(:,6)+w_noise/10,Y(:,4)+w_noise/10,Y(:,5)+w_noise/10;
+Z_ErrV(:,1) = Y(4:10:end-1,6)'-v(1,5:10:end);   %x
+Z_ErrV(:,2) = Y(4:10:end-1,4)'-v(2,5:10:end);   %y
+Z_ErrV(:,3) = Y(4:10:end-1,5)'-v(3,5:10:end);   %z
+Z_ErrV2(:,1) = GPS_V(4:10:end-1,1)-Y(4:10:end-1,6);   %x
+Z_ErrV2(:,2) = GPS_V(4:10:end-1,2)-Y(4:10:end-1,4);   %y
+Z_ErrV2(:,3) = GPS_V(4:10:end-1,3)-Y(4:10:end-1,5);   %z
+
+
+figure(9);clf(9)
+subplot(3,1,1);hold on;
+plot([1:10:D_N]*0.005,Z_Err2(:,1),'r');hold on;
+plot([1:10:D_N]*0.005,Z_Err(:,1),'k');legend('BDS位置误差','组合导航位置误差');
+ylabel('x轴向位置误差(m)');xlabel('时间(s)');
+title("x轴向位置误差");grid on;
+subplot(3,1,2);hold on;
+plot([1:10:D_N]*0.005,Z_Err2(:,2),'r');hold on;
+plot([1:10:D_N]*0.005,Z_Err(:,2),'k');legend('BDS位置误差','组合导航位置误差');
+ylabel('y轴向位置误差(m)');xlabel('时间(s)');
+title("y轴向位置误差");grid on;
+subplot(3,1,3);hold on;
+plot([1:10:D_N]*0.005,Z_Err2(:,3),'r');hold on;
+plot([1:10:D_N]*0.005,Z_Err(:,3),'k');legend('BDS位置误差','组合导航位置误差');
+ylabel('z轴向位置误差(m)');xlabel('时间(s)');
+title("z轴向位置误差");grid on;
+
+figure(11);clf(11)
+subplot(3,1,1);hold on;
+plot([1:10:D_N]*0.005,Z_ErrV2(:,1),'r');hold on;
+plot([1:10:D_N]*0.005,Z_ErrV(:,1),'k');legend('BDS速度误差','组合导航速度误差');
+ylabel('x轴向速度误差(m/s)');xlabel('时间(s)');
+title("x轴向速度误差");grid on;
+subplot(3,1,2);hold on;
+plot([1:10:D_N]*0.005,Z_ErrV2(:,2),'r');hold on;
+plot([1:10:D_N]*0.005,Z_ErrV(:,2),'k');legend('BDS速度误差','组合导航速度误差');
+ylabel('y轴向速度误差(m/s)');xlabel('时间(s)');
+title("y轴向速度误差");grid on;
+subplot(3,1,3);hold on;
+plot([1:10:D_N]*0.005,Z_ErrV2(:,3),'r');hold on;
+plot([1:10:D_N]*0.005,Z_ErrV(:,3),'k');legend('BDS速度误差','组合导航速度误差');
+ylabel('z轴向速度误差(m/s)');xlabel('时间(s)');
+title("z轴向速度误差");grid on;
+
+err_x2 = sqrt(sum(Z_Err2(:,1).^2)/1353);
+err_y2 = sqrt(sum(Z_Err2(:,2).^2)/1353);
+err_z2 = sqrt(sum(Z_Err2(:,3).^2)/1353);
+err_x1 = sqrt(sum(Z_Err(:,1).^2)/1353);
+err_y1 = sqrt(sum(Z_Err(:,2).^2)/1353);
+err_z1 = sqrt(sum(Z_Err(:,3).^2)/1353);
+
+figure(1);
+plot3(XYZ(1,200:500),XYZ(2,200:500),XYZ(end,200:500),'r*');hold on;
+% axis equal;
+plot3(Y(200:500,3),Y(200:500,1),Y(200:500,2),'bo');hold on;
+plot3(GPS_plot(20:50,1),GPS_plot(20:50,2),GPS_plot(20:50,3),'K.');hold on;
+ylabel('y轴坐标');xlabel('x轴坐标');zlabel('z轴坐标');
+title('组合导航轨迹图');legend('组合导航轨迹','弹道模型轨迹','BDS轨迹');
+
+figure(12);
+plot3(XYZ(1,1:10:end),XYZ(2,1:10:end),XYZ(end,1:10:end),'r*');hold on;
+% axis equal;
+plot3(Y(1:10:end,3),Y(1:10:end,1),Y(1:10:end,2),'bo');hold on;
+plot3(GPS_Y(1:10:end,1),GPS_Y(1:10:end,2),GPS_Y(1:10:end,3),'K.');hold on;
+ylabel('y轴坐标');xlabel('x轴坐标');zlabel('z轴坐标');
+title('组合导航轨迹图');legend('组合导航轨迹','弹道模型轨迹','BDS轨迹');
+
+figure(2);
+title('Y杞撮?熷害');
+hold on;
+plot(v(2,:),'k');
+hold on;
+plot(Y(:,4),'b');
+legend('IMU瑙ｇ畻寮归亾','鐞嗚寮归亾');
+
+
+figure(3);
+title('Z杞撮?熷害');
+hold on;
+plot(v(3,:),'k');
+hold on;
+plot(Y(:,5),'b');
+legend('IMU瑙ｇ畻寮归亾','鐞嗚寮归亾');
+
+figure(4);
+title('X杞撮?熷害');
+hold on;
+plot(v(1,:),'k');
+hold on;
+plot(Y(:,6),'b');
+legend('IMU瑙ｇ畻寮归亾','鐞嗚寮归亾');
+
+figure(7);clf(7);
+subplot(3,1,1);hold on;
+plot([1:D_N]*0.005,Euler(1,:),'k');legend('角度');
+ylabel('俯仰角(°)');xlabel('时间(s)');
+title("俯仰角曲线");grid on;
+subplot(3,1,2);hold on;
+plot([1:1:D_N]*0.005,Euler(2,:),'k');legend('角度');
+ylabel('横滚角(°)');xlabel('时间(s)');
+title("横滚角曲线");grid on;
+subplot(3,1,3);hold on;
+plot([1:1:D_N]*0.005,Euler(3,:)+60,'k');legend('角度');
+ylabel('偏航角(°)');xlabel('时间(s)');
+title("偏航角曲线");grid on;
+
+figure(8);clf(8);
+plot(w_noise1,'k');
+title("高斯噪声");grid on;
